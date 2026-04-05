@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
-import Dashboard    from "./pages/Dashboard";
-import AlertQueue   from "./pages/AlertQueue";
-import UserProfile  from "./pages/UserProfile";
+import Dashboard      from "./pages/Dashboard";
+import AlertQueue     from "./pages/AlertQueue";
+import UserProfile    from "./pages/UserProfile";
+import ThreatTheater from "./pages/ThreatTheater";
 import "./index.css";
 
 // ── Icons (inline SVG) ────────────────────────────────────────────────────────
@@ -34,6 +35,15 @@ const UsersIcon = () => (
     <circle cx="9" cy="7" r="4" />
     <path d="M23 21v-2a4 4 0 00-3-3.87" />
     <path d="M16 3.13a4 4 0 010 7.75" />
+  </svg>
+);
+
+const TheatreIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M2 12C2 6.48 6.48 2 12 2s10 4.48 10 10-4.48 10-10 10S2 17.52 2 12z" />
+    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <line x1="9" y1="9" x2="9.01" y2="9" strokeLinecap="round" strokeWidth="3" />
+    <line x1="15" y1="9" x2="15.01" y2="9" strokeLinecap="round" strokeWidth="3" />
   </svg>
 );
 
@@ -85,6 +95,15 @@ function Sidebar() {
           <UsersIcon />
           Users
         </NavLink>
+
+        <NavLink
+          id="nav-threat-theater"
+          to="/threat-theater"
+          className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+        >
+          <TheatreIcon />
+          Threat Theater
+        </NavLink>
       </nav>
 
       {/* Footer */}
@@ -117,10 +136,11 @@ export default function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/"            element={<Dashboard />} />
-          <Route path="/alerts"      element={<AlertQueue />} />
-          <Route path="/users"       element={<Dashboard />} />
-          <Route path="/user/:userId" element={<UserProfile />} />
+          <Route path="/"               element={<Dashboard />} />
+          <Route path="/alerts"         element={<AlertQueue />} />
+          <Route path="/users"          element={<Dashboard />} />
+          <Route path="/user/:userId"   element={<UserProfile />} />
+          <Route path="/threat-theater" element={<ThreatTheater />} />
         </Routes>
       </Layout>
     </BrowserRouter>
