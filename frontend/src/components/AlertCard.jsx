@@ -7,7 +7,8 @@ const scoreColor = (score) => {
   return "text-low";
 };
 
-const scoreBorderColor = (score) => {
+const scoreBorderColor = (score, isHijack) => {
+  if (isHijack) return "border-critical/60 glow-red";
   if (score >= 80) return "border-critical/40 glow-red";
   if (score >= 65) return "border-high/40 glow-red";
   if (score >= 40) return "border-medium/40 glow-yellow";
@@ -39,11 +40,13 @@ const formatTime = (iso) => {
  */
 export default function AlertCard({ alert, onDismiss, dismissing, style }) {
   const navigate = useNavigate();
+  const isHijack = typeof alert.explanation === "string" &&
+    alert.explanation.startsWith("SESSION HIJACK DETECTED");
 
   return (
     <div
       id={`alert-card-${alert.id}`}
-      className={`card border animate-slide-up ${scoreBorderColor(alert.risk_score)} transition-all duration-200`}
+      className={`card border animate-slide-up ${scoreBorderColor(alert.risk_score, isHijack)} transition-all duration-200`}
       style={style}
     >
       <div className="flex items-start gap-4">
@@ -60,9 +63,22 @@ export default function AlertCard({ alert, onDismiss, dismissing, style }) {
           >
             {alert.risk_score?.toFixed(0)}
           </div>
-          <span className={`${scoreBadge(alert.risk_score)} text-[10px] px-1.5 py-0.5`}>
-            {scoreLabel(alert.risk_score)}
-          </span>
+          {isHijack ? (
+            <span
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+              style={{
+                background: "rgba(220,38,38,0.25)",
+                color: "#fca5a5",
+                border: "1px solid rgba(220,38,38,0.5)",
+              }}
+            >
+              ⚠ SESSION HIJACK
+            </span>
+          ) : (
+            <span className={`${scoreBadge(alert.risk_score)} text-[10px] px-1.5 py-0.5`}>
+              {scoreLabel(alert.risk_score)}
+            </span>
+          )}
         </div>
 
         {/* Content */}
@@ -81,7 +97,10 @@ export default function AlertCard({ alert, onDismiss, dismissing, style }) {
 
           {/* SHAP explanation */}
           {alert.explanation ? (
-            <p className={`text-sm leading-relaxed mt-1 ${alert.risk_score >= 65 ? "text-slate-300" : "text-muted"}`}>
+            <p className={`text-sm leading-relaxed mt-1 ${
+              isHijack ? "text-red-300 font-medium" :
+              alert.risk_score >= 65 ? "text-slate-300" : "text-muted"
+            }`}>
               <span
                 className={`inline-block w-1.5 h-1.5 rounded-full mr-2 mb-0.5
                   ${alert.risk_score >= 80 ? "bg-critical" : alert.risk_score >= 65 ? "bg-high" : "bg-medium"}`}

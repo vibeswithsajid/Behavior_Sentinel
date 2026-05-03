@@ -17,6 +17,7 @@ Startup sequence:
 
 import os
 import sys
+import uuid
 import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -24,6 +25,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR  = os.path.join(BASE_DIR, "data")
@@ -45,6 +47,14 @@ app.add_middleware(
 
 # ── State ─────────────────────────────────────────────────────────────────────
 _detection_running = False
+
+
+# ── Request models ────────────────────────────────────────────────────────────
+
+class SessionLogin(BaseModel):
+    user_id: str
+    ip_address: str
+    device_agent: Optional[str] = ""
 
 
 # ── Helper: full pipeline ─────────────────────────────────────────────────────
@@ -241,3 +251,80 @@ def get_stats() -> Dict[str, Any]:
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "service": "BehaviorSentinel API"}
+
+
+# ── Session Hijack Detection ───────────────────────────────────────────────
+
+@app.post("/api/sessions/login", tags=["Sessions"])
+def session_login(body: SessionLogin) -> Dict[str, Any]:
+    """
+    Register a new login session for a user.
+
+    Detects silent session hijacking: if another active session exists for the
+    same user_id from a DIFFERENT ip_address within the last 30 minutes,
+    all sessions are marked suspicious and a CRITICAL alert is raised.
+
+    Request body: { user_id, ip_address, device_agent }
+    Response:     { session_id, user_id, hijack_detected, message }
+    """
+    import database as db
+
+    session_id = str(uuid.uuid4())
+
+    # 1. Insert the new session
+    db.insert_session(
+        session_id=session_id,
+        user_id=body.user_id,
+        ip_address=body.ip_address,
+        device_agent=body.device_agent or "",
+    )
+
+    # 2. Fetch all active sessions for this user (last 30 min)
+    active = db.get_active_sessions(body.user_id)
+
+    # 3. Check for a concurrent session from a DIFFERENT IP
+    other_ips = [
+        s["ip_address"]
+        for s in active
+        if s["ip_address"] != body.ip_address and s["session_id"] != session_id
+    ]
+
+    hijack_detected = len(other_ips) > 0
+
+    if hijack_detected:
+        conflicting_ip = other_ips[0]
+
+        # 4a. Mark all sessions for this user suspicious
+        db.mark_sessions_suspicious(body.user_id)
+
+        # 4b. Build explanation string (prefix must be "SESSION HIJACK DETECTED")
+        explanation = (
+            f"SESSION HIJACK DETECTED: User {body.user_id} has concurrent active sessions "
+            f"from {conflicting_ip} and {body.ip_address} simultaneously. "
+            f"Possible credential theft in progress."
+        )
+
+        # 4c. Insert a critical alert directly (bypasses ML pipeline)
+        db.insert_alert_direct(
+            user_id=body.user_id,
+            risk_score=100.0,
+            severity="critical",
+            explanation=explanation,
+        )
+
+        return {
+            "session_id":      session_id,
+            "user_id":         body.user_id,
+            "hijack_detected": True,
+            "message": (
+                f"ALERT: Concurrent session detected from {conflicting_ip}. "
+                f"All sessions flagged. Critical alert raised."
+            ),
+        }
+
+    return {
+        "session_id":      session_id,
+        "user_id":         body.user_id,
+        "hijack_detected": False,
+        "message":         "Session registered. No concurrent session conflict detected.",
+    }

@@ -61,6 +61,17 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at  TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id   TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    ip_address   TEXT NOT NULL,
+    device_agent TEXT,
+    login_at     TEXT DEFAULT (datetime('now')),
+    last_active  TEXT DEFAULT (datetime('now')),
+    is_suspicious INTEGER DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
 """
 
 
@@ -255,3 +266,76 @@ def scores_exist() -> bool:
     count = conn.execute("SELECT COUNT(*) FROM risk_scores").fetchone()[0]
     conn.close()
     return count > 0
+
+
+# ── CRUD: Sessions ────────────────────────────────────────────────────────────
+
+def insert_session(session_id: str, user_id: str, ip_address: str, device_agent: str):
+    """Insert a new login session record."""
+    conn = _get_conn()
+    now = datetime.utcnow().isoformat()
+    conn.execute(
+        """
+        INSERT INTO sessions (session_id, user_id, ip_address, device_agent, login_at, last_active, is_suspicious)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+        """,
+        (session_id, user_id, ip_address, device_agent or "", now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_active_sessions(user_id: str) -> List[Dict[str, Any]]:
+    """
+    Return all sessions for user_id whose last_active is within the last 30 minutes.
+    """
+    conn = _get_conn()
+    rows = conn.execute(
+        """
+        SELECT session_id, user_id, ip_address, device_agent, login_at, last_active, is_suspicious
+        FROM sessions
+        WHERE user_id = ?
+          AND last_active >= datetime('now', '-30 minutes')
+        ORDER BY login_at ASC
+        """,
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_sessions_suspicious(user_id: str):
+    """Mark all sessions for a user as is_suspicious=1."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE sessions SET is_suspicious = 1 WHERE user_id = ?",
+        (user_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def insert_alert_direct(
+    user_id: str,
+    risk_score: float,
+    severity: str,
+    explanation: str,
+) -> int:
+    """
+    Insert a single alert row directly (used for event-driven alerts such as
+    session-hijack detection that don't go through rebuild_alerts).
+    Returns the new alert id.
+    """
+    conn = _get_conn()
+    now = datetime.utcnow().isoformat()
+    cur = conn.execute(
+        """
+        INSERT INTO alerts (user_id, risk_score, severity, explanation, dismissed, created_at)
+        VALUES (?, ?, ?, ?, 0, ?)
+        """,
+        (user_id, risk_score, severity, explanation, now),
+    )
+    alert_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return alert_id
