@@ -4,95 +4,89 @@
 
 ---
 
-## Architecture
+## Architecture & Multi-Entity Model
 
 ```
-behaviorsentinel/
-├── backend/
-│   ├── main.py              # FastAPI REST API
-│   ├── ingest.py            # Feature engineering (30-day rolling deviations)
-│   ├── profiler.py          # Per-user baseline profiles
-│   ├── detector.py          # Isolation Forest + Autoencoder ensemble
-│   ├── explainer.py         # SHAP natural-language explanations
-│   ├── database.py          # SQLite schema + CRUD
-│   ├── data/
-│   │   ├── synthetic_logs.py   # Synthetic CERT-style log generator
-│   │   ├── logs.csv            # (generated)
-│   │   └── feature_matrix.csv  # (generated)
-│   ├── models/              # Saved ML model files (generated)
-│   └── requirements.txt
-└── frontend/
-    └── src/
-        ├── pages/           # Dashboard, AlertQueue, UserProfile
-        └── components/      # RiskScoreCard, BehaviourChart, AlertCard, SHAPExplanation
+┌────────────────────────────────────────────────────────┐
+│ [ENTITY 1] THE CLIENT ENTERPRISE                       │
+│ Port: http://localhost:3000                            │
+│ "Apex Global Technologies — Enterprise Cloud Intranet" │
+├────────────────────────────────────────────────────────┤
+│ • Employees: Intern, Junior, Senior Manager, Exec      │
+│ • Corporate Document Vault (up to 850 MB databases)    │
+│ • Threat Playground (Rogue Exfiltration, Brute-Force)  │
+│ • Embedded Sentinel EDR Telemetry Agent v2.4 HUD       │
+└───────────────────────────┬────────────────────────────┘
+                            │ Real-Time HTTP Telemetry Webhook
+                            │ (POST http://localhost:8000/api/telemetry/event)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ [ENTITY 2] BEHAVIORSENTINEL (3rd-Party Security SaaS)  │
+│ Backend: http://localhost:8000                         │
+│ SOC UI:  http://localhost:5173                         │
+├────────────────────────────────────────────────────────┤
+│ • Telemetry Ingestion Engine (`telemetry.py`)          │
+│ • 30-Day Rolling Statistical Baseline Deviation Engine │
+│ • Dual-Model Ensemble: Isolation Forest + Autoencoder  │
+│ • Real-time Mathematical SHAP Attribution (Tree Expl.) │
+│ • SOC Dashboard, Live Telemetry Stream, Alert Queue    │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Quick Start
+## Quick Start (Running Both Entities)
 
-### 1. Install backend dependencies
-
+### 1. Start the BehaviorSentinel Backend (Port 8000)
 ```bash
 cd backend
 pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
+API docs: **http://localhost:8000/docs**
 
-> **Apple Silicon (M1/M2/M3)**: Replace `tensorflow` with `tensorflow-macos tensorflow-metal` in `requirements.txt`.
-
-### 2. Generate synthetic logs
-
+### 2. Start the BehaviorSentinel SOC Dashboard (Port 5173)
 ```bash
-python data/synthetic_logs.py
-```
-
-Generates `data/logs.csv` — 50 users × 60 days = 3,000 log records.  
-Users **U003**, **U017**, and **U031** are malicious with injected anomalies in the last 10 days.
-
-### 3. Train ML models
-
-```bash
-python detector.py
-```
-
-Trains and saves:
-- `models/isolation_forest.pkl`  
-- `models/autoencoder.keras`  
-- `models/scaler.pkl`
-
-Prints the top 10 highest-risk users.
-
-### 4. Start the API server
-
-```bash
-uvicorn main:app --reload
-```
-
-API available at **http://localhost:8000**  
-Interactive docs: **http://localhost:8000/docs**
-
-### 5. Start the React frontend
-
-```bash
-cd ../frontend
+cd frontend
 npm install
 npm run dev
 ```
+SOC panel: **http://localhost:5173** (Demo Logins: Intern, Junior, Sr. Manager, Manager)
 
-Dashboard available at **http://localhost:5173**
+### 3. Start the Mock Enterprise Client Portal (Port 3000)
+```bash
+cd mock_company
+npm install
+npm run dev
+```
+Client Enterprise Workspace: **http://localhost:3000**
 
 ---
 
-## API Endpoints
+## 4 Demo User Accounts & Roles
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET`  | `/api/users` | All users with current risk scores |
-| `GET`  | `/api/user/{user_id}` | Full timeline + SHAP explanation |
-| `GET`  | `/api/alerts` | Active alerts (score > 65), sorted by severity |
-| `POST` | `/api/alerts/{alert_id}/dismiss` | Analyst dismisses an alert |
-| `GET`  | `/api/run-detection` | Trigger full pipeline, returns updated scores |
-| `GET`  | `/api/stats` | Dashboard summary statistics |
+| Role | Username | Password | User Name & Department | Access Scope |
+|---|---|---|---|---|
+| **Intern** | `intern01` | `intern123` | Alex Rivera (Engineering) | View personal activity & risk score; Download personal CSV |
+| **Junior** | `junior01` | `junior123` | Jordan Kim (Finance) | All Intern capabilities + Download Team Risk Scores CSV |
+| **Senior Manager** | `senior_mgr` | `senior123` | Morgan Singh (Operations) | Full Dashboard access, user risk overview, active Alert Queue |
+| **Manager** | `manager` | `manager123` | Taylor Brooks (Management) | Full administrative access, trigger ML Detection, Full Data ZIP |
+
+---
+
+## Real-Time Telemetry & Core Endpoints
+
+| Method | Path | Description | Access |
+|---|---|---|---|
+| `POST` | `/api/login` | Authenticate and obtain JWT token | Public |
+| `POST` | `/api/telemetry/event` | Real-time webhook ingestion from client enterprises | Client Webhook |
+| `GET`  | `/api/telemetry/live-feed` | Live telemetry stream ticker | Public / SOC |
+| `GET`  | `/api/my-activity` | Personal profile and activity history | All Roles |
+| `GET`  | `/api/users` | All users with current risk scores | Senior Manager+ |
+| `GET`  | `/api/alerts` | Active threat alerts with SHAP explanations | Senior Manager+ |
+| `POST` | `/api/alerts/{id}/dismiss`| Dismiss an alert | Senior Manager+ |
+| `GET`  | `/api/run-detection` | Trigger ensemble ML pipeline | Manager only |
+| `GET`  | `/api/download/full-report`| Full dataset ZIP archive export | Manager only |
 
 ---
 

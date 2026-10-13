@@ -61,6 +61,25 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at  TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS auth_users (
+    user_id       TEXT PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL,
+    created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS activity_events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           TEXT NOT NULL,
+    event_date        TEXT NOT NULL,
+    event_type        TEXT NOT NULL,
+    endpoint          TEXT,
+    bytes_transferred INTEGER DEFAULT 0,
+    hour              INTEGER DEFAULT 0,
+    created_at        TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -255,3 +274,88 @@ def scores_exist() -> bool:
     count = conn.execute("SELECT COUNT(*) FROM risk_scores").fetchone()[0]
     conn.close()
     return count > 0
+
+
+# ── Auth Users ────────────────────────────────────────────────────────────────
+
+def seed_auth_users(fixed_users: list):
+    """
+    Insert fixed login accounts into auth_users + users tables.
+    Idempotent — skips rows that already exist.
+    """
+    from auth import hash_password
+    conn = _get_conn()
+    cur  = conn.cursor()
+    for u in fixed_users:
+        cur.execute(
+            "INSERT OR IGNORE INTO auth_users (user_id, username, password_hash, role) VALUES (?, ?, ?, ?)",
+            (u["user_id"], u["username"], hash_password(u["password"]), u["role"]),
+        )
+        cur.execute(
+            "INSERT OR IGNORE INTO users (user_id, name, department) VALUES (?, ?, ?)",
+            (u["user_id"], u["name"], u["department"]),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_auth_user(username: str) -> Optional[Dict[str, Any]]:
+    conn = _get_conn()
+    row  = conn.execute(
+        "SELECT * FROM auth_users WHERE username = ?", (username,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ── Activity Events ───────────────────────────────────────────────────────────
+
+def record_activity_event(
+    user_id: str,
+    event_date: str,
+    event_type: str,
+    endpoint: str,
+    bytes_transferred: int,
+    hour: int,
+):
+    conn = _get_conn()
+    conn.execute(
+        """INSERT INTO activity_events
+           (user_id, event_date, event_type, endpoint, bytes_transferred, hour)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (user_id, event_date, event_type, endpoint, bytes_transferred, hour),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_activity_events_for_date(event_date: str) -> List[Dict[str, Any]]:
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT * FROM activity_events WHERE event_date = ? ORDER BY created_at",
+        (event_date,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_activity_summary(user_id: str, days: int = 7) -> List[Dict[str, Any]]:
+    """Return per-day activity counts for a user (last N days)."""
+    conn = _get_conn()
+    rows = conn.execute(
+        """
+        SELECT event_date,
+               SUM(CASE WHEN event_type='page_view'     THEN 1 ELSE 0 END) AS page_views,
+               SUM(CASE WHEN event_type='download'      THEN 1 ELSE 0 END) AS downloads,
+               SUM(CASE WHEN event_type='login_fail'    THEN 1 ELSE 0 END) AS login_fails,
+               SUM(bytes_transferred) AS total_bytes
+        FROM activity_events
+        WHERE user_id = ?
+        GROUP BY event_date
+        ORDER BY event_date DESC
+        LIMIT ?
+        """,
+        (user_id, days),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

@@ -1,7 +1,9 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchUsers, fetchStats, runDetection } from "../api";
+import { fetchUsers, fetchStats, runDetection, aggregateAndDetect, fetchLiveTelemetry } from "../api";
+import { useAuth } from "../context/AuthContext";
 import RiskScoreCard from "../components/RiskScoreCard";
+import DownloadPanel from "../components/DownloadPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const scoreClass = (score) => {
@@ -58,6 +60,8 @@ function LoadingSkeleton() {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { hasRole } = useAuth();
+  const isManager = hasRole("manager");
 
   const [users,       setUsers]       = useState([]);
   const [stats,       setStats]       = useState(null);
@@ -67,13 +71,23 @@ export default function Dashboard() {
   const [error,       setError]       = useState(null);
   const [filter,      setFilter]      = useState("all"); // all | high | medium | low
   const [searchQuery, setSearchQuery] = useState("");
+  const [liveEvents,  setLiveEvents]  = useState([]);
+  const lastEventIdRef = useRef(null);
 
   const loadData = async () => {
     try {
       setError(null);
-      const [u, s] = await Promise.all([fetchUsers(), fetchStats()]);
+      const [u, s, evts] = await Promise.all([
+        fetchUsers(),
+        fetchStats(),
+        fetchLiveTelemetry(10).catch(() => []),
+      ]);
       setUsers(u);
       setStats(s);
+      if (evts && evts.length > 0) {
+        setLiveEvents(evts);
+        lastEventIdRef.current = evts[0]?.id;
+      }
     } catch (err) {
       setError("Failed to fetch data. Ensure the backend is running on port 8000.");
     } finally {
@@ -81,7 +95,29 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    // Live telemetry poller (every 2.5s)
+    const interval = setInterval(async () => {
+      try {
+        const evts = await fetchLiveTelemetry(10);
+        if (evts && evts.length > 0) {
+          setLiveEvents(evts);
+          if (evts[0]?.id !== lastEventIdRef.current) {
+            lastEventIdRef.current = evts[0]?.id;
+            // New event arrived from Apex Global! Refresh users table & stats
+            const [u, s] = await Promise.all([fetchUsers(), fetchStats()]);
+            setUsers(u);
+            setStats(s);
+          }
+        }
+      } catch {
+        /* ignore polling errors */
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleRunDetection = async () => {
     setRunning(true);
@@ -92,6 +128,20 @@ export default function Dashboard() {
       await loadData();
     } catch (err) {
       setError("Detection run failed: " + (err?.response?.data?.detail || err.message));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleAggregateAndDetect = async () => {
+    setRunning(true);
+    setRunResult(null);
+    try {
+      const result = await aggregateAndDetect();
+      setRunResult({ ...result, status: "aggregated" });
+      await loadData();
+    } catch (err) {
+      setError("Aggregation failed: " + (err?.response?.data?.detail || err.message));
     } finally {
       setRunning(false);
     }
@@ -129,31 +179,45 @@ export default function Dashboard() {
           {runResult && (
             <div className="text-xs text-low bg-low/10 border border-low/30 px-3 py-1.5 rounded-lg font-mono">
               ✓ {runResult.users_scored} scored · {runResult.alerts_generated} alerts
+              {runResult.rows_aggregated != null && ` · ${runResult.rows_aggregated} rows from real data`}
             </div>
           )}
-          <button
-            id="btn-run-detection"
-            className="btn-primary"
-            onClick={handleRunDetection}
-            disabled={running}
-          >
-            {running ? (
-              <>
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3" />
-                  <path d="M21 12a9 9 0 00-9-9" />
-                </svg>
-                Running…
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                Run Detection
-              </>
-            )}
-          </button>
+          {isManager && (
+            <button
+              id="btn-aggregate-detect"
+              className="btn-ghost text-xs"
+              onClick={handleAggregateAndDetect}
+              disabled={running}
+              title="Aggregate today's real activity then run detection"
+            >
+              {running ? "Running…" : "⚡ Aggregate + Detect"}
+            </button>
+          )}
+          {isManager && (
+            <button
+              id="btn-run-detection"
+              className="btn-primary"
+              onClick={handleRunDetection}
+              disabled={running}
+            >
+              {running ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3" />
+                    <path d="M21 12a9 9 0 00-9-9" />
+                  </svg>
+                  Running…
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                  Run Detection
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -166,6 +230,39 @@ export default function Dashboard() {
           {error}
         </div>
       )}
+
+      {/* ── Monitored Enterprise Client Banner ────────────────────────────── */}
+      <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-card border border-blue-500/30 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-xl text-blue-400">
+            🏢
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-white tracking-wide">Monitored Client: Apex Global Technologies Inc.</h3>
+              <span className="flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                TELEMETRY ACTIVE
+              </span>
+            </div>
+            <p className="text-xs text-muted mt-0.5">
+              Receiving live audit logs & behavioural events from Enterprise Cloud ERP on <code className="text-blue-400">localhost:3000</code>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <a
+            href="http://localhost:3000"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            <span>Open Apex Global Portal</span>
+            <span>↗</span>
+          </a>
+        </div>
+      </div>
 
       {/* ── Stat cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -198,6 +295,57 @@ export default function Dashboard() {
           color="text-slate-300"
         />
       </div>
+
+      {/* ── Real-time Telemetry Stream Ticker ─────────────────────────────── */}
+      {liveEvents.length > 0 && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
+              <h3 className="font-semibold text-white text-sm">Real-time Telemetry Stream (Apex Global)</h3>
+            </div>
+            <span className="text-xs text-muted font-mono">{liveEvents.length} recent events</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {liveEvents.slice(0, 6).map((evt) => (
+              <div
+                key={evt.id}
+                className={`p-3 rounded-lg border text-xs flex flex-col justify-between transition-all ${
+                  evt.severity === "critical"
+                    ? "bg-rose-950/20 border-rose-500/40 text-rose-200"
+                    : evt.severity === "high"
+                    ? "bg-amber-950/20 border-amber-500/40 text-amber-200"
+                    : "bg-navy/60 border-border text-slate-300"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <span className="font-bold text-white block truncate max-w-[150px]">
+                      {evt.user_name}
+                    </span>
+                    <span className="text-[10px] text-muted font-mono">{evt.action}</span>
+                  </div>
+                  <span
+                    className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded border ${
+                      evt.risk_score >= 80
+                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                        : evt.risk_score >= 65
+                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                        : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                    }`}
+                  >
+                    {evt.risk_score}
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted truncate">
+                  {evt.explanation}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── User leaderboard ─────────────────────────────────────────────── */}
       <div className="card">
@@ -314,6 +462,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      {/* ── Download Panel ────────────────────────────────────────────── */}
+      <DownloadPanel />
     </div>
   );
 }

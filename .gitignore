@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Node / Web
+node_modules
+node_modules/
+**/node_modules
+**/node_modules/**
+dist/
+**/dist/**
+dist-ssr/
+*.local
+
+# macOS
+.DS_Store
+
+# Runtime logs & sqlite db
+*.log
+backend/data/*.db-wal
+backend/data/*.db-shm
