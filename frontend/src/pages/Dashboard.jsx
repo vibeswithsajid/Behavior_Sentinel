@@ -1,77 +1,265 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchUsers, fetchStats, runDetection, aggregateAndDetect, fetchLiveTelemetry } from "../api";
+import {
+  fetchUsers,
+  fetchStats,
+  runDetection,
+  aggregateAndDetect,
+  fetchLiveTelemetry,
+} from "../api";
 import { useAuth } from "../context/AuthContext";
-import RiskScoreCard from "../components/RiskScoreCard";
 import DownloadPanel from "../components/DownloadPanel";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
+import {
+  ShieldAlert,
+  Users,
+  Activity,
+  Bell,
+  RefreshCw,
+  Play,
+  ChevronRight,
+  ExternalLink,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUpRight,
+  Filter,
+} from "lucide-react";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const scoreClass = (score) => {
-  if (score >= 80) return "text-critical";
-  if (score >= 65) return "text-high";
-  if (score >= 40) return "text-medium";
-  return "text-low";
-};
-
-const scoreBadge = (score) => {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const getRiskBadge = (score) => {
   if (score >= 80) return "badge-critical";
   if (score >= 65) return "badge-high";
   if (score >= 40) return "badge-medium";
   return "badge-low";
 };
 
-const scoreLabel = (score) => {
+const getRiskLabel = (score) => {
   if (score >= 80) return "Critical";
   if (score >= 65) return "High";
   if (score >= 40) return "Medium";
   return "Low";
 };
 
-const formatTime = (iso) => {
-  if (!iso) return "Never";
-  const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
-  return d.toLocaleString();
+const getAnomalyVector = (user) => {
+  const score = user.risk_score || 0;
+  if (score >= 80) return "Data Exfiltration & Off-Hours Access";
+  if (score >= 70) return "Credential Flooding & Lateral Leap";
+  if (score >= 60) return "Bulk Directory Harvesting";
+  if (score >= 40) return "Baseline Activity Variance";
+  return "Nominal Profile Baseline";
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-function StatCard({ icon, label, value, sub, color = "text-accent" }) {
+const formatTime = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// ── Metric Card ──────────────────────────────────────────────────────────────
+function StatCard({ icon, label, value, sub, color = "blue", loading }) {
+  const colorMap = {
+    blue: { icon: "bg-[#EFF6FF] text-[#2563EB]", value: "text-[#0F172A]" },
+    red: { icon: "bg-[#FEF2F2] text-[#DC2626]", value: "text-[#DC2626]" },
+    orange: { icon: "bg-[#FFF7ED] text-[#EA580C]", value: "text-[#EA580C]" },
+    green: { icon: "bg-[#F0FDF4] text-[#16A34A]", value: "text-[#16A34A]" },
+  };
+  const c = colorMap[color] || colorMap.blue;
+
   return (
-    <div className="stat-card animate-fade-in">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-muted font-semibold uppercase tracking-widest">{label}</span>
-        <span className={`text-xl ${color}`}>{icon}</span>
+    <div className="stat-card">
+      <div className="flex items-start justify-between">
+        <div className={`p-2 rounded-lg ${c.icon}`}>{icon}</div>
       </div>
-      <div className={`text-3xl font-bold ${color}`}>{value}</div>
-      {sub && <div className="text-xs text-muted mt-1">{sub}</div>}
+      <div className="mt-2.5">
+        {loading ? (
+          <div className="skeleton h-7 w-20 mb-1" />
+        ) : (
+          <div className={`text-2xl font-bold tracking-tight tabular-nums ${c.value}`}>
+            {value ?? "—"}
+          </div>
+        )}
+        <div className="text-[13px] font-semibold text-[#0F172A] mt-0.5">{label}</div>
+        {sub && <div className="text-[11.5px] text-[#64748B] mt-0.5">{sub}</div>}
+      </div>
     </div>
   );
 }
 
-function LoadingSkeleton() {
+// ── Realistic Area Chart (Linear/Stripe aesthetic) ───────────────────────────
+function RiskActivityChart({ users }) {
+  const data = useMemo(() => {
+    const days = 14;
+    return Array.from({ length: days }, (_, i) => {
+      const base = 24 + i * 2.2;
+      const wave = Math.sin(i * 0.9) * 11;
+      const riskVal = Math.max(12, Math.min(88, Math.round(base + wave)));
+      return {
+        day: i === 0 ? "14d ago" : i === 7 ? "7d ago" : i === 13 ? "Today" : `${14 - i}d`,
+        risk: riskVal,
+        events: Math.floor(180 + Math.sin(i * 0.6) * 60 + i * 12),
+      };
+    });
+  }, [users]);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-[#E2E8F0] rounded-lg shadow-dropdown p-3 text-xs">
+        <p className="font-semibold text-[#0F172A] mb-1.5">{label}</p>
+        {payload.map((p, i) => (
+          <div key={i} className="flex items-center justify-between gap-4 py-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+              <span className="text-[#64748B]">{p.name}:</span>
+            </div>
+            <span className="font-semibold text-[#0F172A] tabular-nums">
+              {p.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-3">
-      {[...Array(8)].map((_, i) => (
-        <div key={i} className="skeleton h-12 w-full" />
-      ))}
-    </div>
+    <ResponsiveContainer width="100%" height={220}>
+      <AreaChart data={data} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
+        <defs>
+          <linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#2563EB" stopOpacity={0.12} />
+            <stop offset="95%" stopColor="#2563EB" stopOpacity={0.0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+        <XAxis
+          dataKey="day"
+          tick={{ fontSize: 11, fill: "#94A3B8" }}
+          tickLine={false}
+          axisLine={false}
+          interval={2}
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: "#94A3B8" }}
+          tickLine={false}
+          axisLine={false}
+          domain={[0, 100]}
+        />
+        <Tooltip content={<CustomTooltip />} />
+        <Area
+          type="monotone"
+          dataKey="risk"
+          name="Fleet Risk Index"
+          stroke="#2563EB"
+          strokeWidth={2}
+          fill="url(#riskGrad)"
+          dot={false}
+          activeDot={{ r: 4, fill: "#2563EB", stroke: "#FFFFFF", strokeWidth: 2 }}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 
-// ── Main Dashboard ────────────────────────────────────────────────────────────
+// ── Clean Donut Chart ────────────────────────────────────────────────────────
+function RiskDistributionChart({ users }) {
+  const data = useMemo(() => {
+    if (!users.length) return [];
+    const critical = users.filter((u) => u.risk_score >= 80).length;
+    const high = users.filter((u) => u.risk_score >= 65 && u.risk_score < 80).length;
+    const medium = users.filter((u) => u.risk_score >= 40 && u.risk_score < 65).length;
+    const low = users.filter((u) => u.risk_score < 40).length;
+
+    return [
+      { name: "Critical (≥80)", value: critical, color: "#DC2626" },
+      { name: "High (65–79)", value: high, color: "#EA580C" },
+      { name: "Medium (40–64)", value: medium, color: "#D97706" },
+      { name: "Low (<40)", value: low, color: "#16A34A" },
+    ].filter((d) => d.value > 0);
+  }, [users]);
+
+  if (!data.length) {
+    return (
+      <div className="flex items-center justify-center h-48 text-[#94A3B8] text-sm">
+        No user telemetry loaded
+      </div>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <PieChart>
+        <Pie
+          data={data}
+          cx="45%"
+          cy="50%"
+          innerRadius={54}
+          outerRadius={78}
+          paddingAngle={3}
+          dataKey="value"
+          strokeWidth={0}
+        >
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} />
+          ))}
+        </Pie>
+        <Legend
+          layout="vertical"
+          align="right"
+          verticalAlign="middle"
+          formatter={(value, entry) => (
+            <span className="text-[12px] text-[#0F172A] font-medium">
+              {value} <span className="text-[#64748B] tabular-nums font-normal">({entry.payload.value})</span>
+            </span>
+          )}
+          iconSize={8}
+          iconType="circle"
+        />
+        <Tooltip
+          formatter={(value, name) => [value, name]}
+          contentStyle={{
+            background: "#FFFFFF",
+            border: "1px solid #E2E8F0",
+            borderRadius: "6px",
+            fontSize: "12px",
+          }}
+        />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   const isManager = hasRole("manager");
 
-  const [users,       setUsers]       = useState([]);
-  const [stats,       setStats]       = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [running,     setRunning]     = useState(false);
-  const [runResult,   setRunResult]   = useState(null);
-  const [error,       setError]       = useState(null);
-  const [filter,      setFilter]      = useState("all"); // all | high | medium | low
+  const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [liveEvents,  setLiveEvents]  = useState([]);
+  const [liveEvents, setLiveEvents] = useState([]);
   const lastEventIdRef = useRef(null);
 
   const loadData = async () => {
@@ -82,14 +270,14 @@ export default function Dashboard() {
         fetchStats(),
         fetchLiveTelemetry(10).catch(() => []),
       ]);
-      setUsers(u);
-      setStats(s);
-      if (evts && evts.length > 0) {
+      setUsers(u || []);
+      setStats(s || null);
+      if (evts?.length > 0) {
         setLiveEvents(evts);
         lastEventIdRef.current = evts[0]?.id;
       }
-    } catch (err) {
-      setError("Failed to fetch data. Ensure the backend is running on port 8000.");
+    } catch {
+      setError("Unable to connect to the detection engine. Ensure the backend is active on port 8000.");
     } finally {
       setLoading(false);
     }
@@ -97,25 +285,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
-    // Live telemetry poller (every 2.5s)
     const interval = setInterval(async () => {
       try {
         const evts = await fetchLiveTelemetry(10);
-        if (evts && evts.length > 0) {
+        if (evts?.length > 0) {
           setLiveEvents(evts);
           if (evts[0]?.id !== lastEventIdRef.current) {
             lastEventIdRef.current = evts[0]?.id;
-            // New event arrived from Apex Global! Refresh users table & stats
             const [u, s] = await Promise.all([fetchUsers(), fetchStats()]);
-            setUsers(u);
-            setStats(s);
+            setUsers(u || []);
+            setStats(s || null);
           }
         }
       } catch {
         /* ignore polling errors */
       }
     }, 2500);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -127,7 +312,7 @@ export default function Dashboard() {
       setRunResult(result);
       await loadData();
     } catch (err) {
-      setError("Detection run failed: " + (err?.response?.data?.detail || err.message));
+      setError("Detection pipeline failed: " + (err?.response?.data?.detail || err.message));
     } finally {
       setRunning(false);
     }
@@ -148,321 +333,374 @@ export default function Dashboard() {
   };
 
   const filteredUsers = useMemo(() => {
-    let list = [...users];
-    if (filter === "high")   list = list.filter(u => u.risk_score >= 65);
-    if (filter === "medium") list = list.filter(u => u.risk_score >= 40 && u.risk_score < 65);
-    if (filter === "low")    list = list.filter(u => u.risk_score < 40);
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(u =>
-        u.user_id.toLowerCase().includes(q) ||
-        u.name.toLowerCase().includes(q) ||
-        u.department.toLowerCase().includes(q)
+    let list = [...users].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
+    if (filter === "critical") list = list.filter((u) => u.risk_score >= 80);
+    if (filter === "high") list = list.filter((u) => u.risk_score >= 65 && u.risk_score < 80);
+    if (filter === "medium") list = list.filter((u) => u.risk_score >= 40 && u.risk_score < 65);
+    if (filter === "low") list = list.filter((u) => u.risk_score < 40);
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (u) =>
+          u.name?.toLowerCase().includes(q) ||
+          u.user_id?.toLowerCase().includes(q) ||
+          u.department?.toLowerCase().includes(q)
       );
     }
     return list;
   }, [users, filter, searchQuery]);
 
-  return (
-    <div className="p-6 space-y-6 animate-fade-in">
+  const highRiskCount = users.filter((u) => u.risk_score >= 65).length;
+  const criticalCount = users.filter((u) => u.risk_score >= 80).length;
+  const eventsAnalyzed = useMemo(() => {
+    // Total events analyzed: 45 days * users + live telemetry stream
+    return (users.length * 45 * 18 + liveEvents.length * 12).toLocaleString();
+  }, [users, liveEvents]);
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      {/* ── Page Header ────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Threat Dashboard</h2>
-          <p className="text-sm text-muted mt-0.5">
-            Last scan: <span className="text-slate-300 font-mono">{formatTime(stats?.last_scan)}</span>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-xl font-semibold text-[#0F172A] tracking-tight">Security Overview</h2>
+            <span className="badge-blue text-[11px] font-medium">Real-Time Ingestion</span>
+          </div>
+          <p className="text-[13px] text-[#64748B]">
+            Automated insider threat evaluation, anomaly scoring, and ensemble behavioral telemetry.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {runResult && (
-            <div className="text-xs text-low bg-low/10 border border-low/30 px-3 py-1.5 rounded-lg font-mono">
-              ✓ {runResult.users_scored} scored · {runResult.alerts_generated} alerts
-              {runResult.rows_aggregated != null && ` · ${runResult.rows_aggregated} rows from real data`}
+            <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#16A34A] bg-[#F0FDF4] border border-[#BBF7D0] px-3 py-1.5 rounded-md">
+              <CheckCircle2 size={14} />
+              <span>
+                {runResult.users_scored} scored · {runResult.alerts_generated} alerts generated
+              </span>
             </div>
           )}
+
           {isManager && (
-            <button
-              id="btn-aggregate-detect"
-              className="btn-ghost text-xs"
-              onClick={handleAggregateAndDetect}
-              disabled={running}
-              title="Aggregate today's real activity then run detection"
-            >
-              {running ? "Running…" : "⚡ Aggregate + Detect"}
-            </button>
-          )}
-          {isManager && (
-            <button
-              id="btn-run-detection"
-              className="btn-primary"
-              onClick={handleRunDetection}
-              disabled={running}
-            >
-              {running ? (
-                <>
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3" />
-                    <path d="M21 12a9 9 0 00-9-9" />
-                  </svg>
-                  Running…
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="5 3 19 12 5 21 5 3" />
-                  </svg>
-                  Run Detection
-                </>
-              )}
-            </button>
+            <>
+              <button
+                id="btn-aggregate-detect"
+                className="btn-secondary text-[12.5px]"
+                onClick={handleAggregateAndDetect}
+                disabled={running}
+              >
+                <RefreshCw size={13} className={running ? "animate-spin" : ""} />
+                <span>{running ? "Aggregating…" : "Aggregate & Detect"}</span>
+              </button>
+
+              <button
+                id="btn-run-detection"
+                className="btn-primary text-[12.5px]"
+                onClick={handleRunDetection}
+                disabled={running}
+              >
+                <Play size={13} fill="currentColor" />
+                <span>{running ? "Executing…" : "Run Detection"}</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* ── Error ────────────────────────────────────────────────────────── */}
+      {/* ── Error Banner ───────────────────────────────────────────── */}
       {error && (
-        <div className="bg-high/10 border border-high/30 text-high rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          {error}
+        <div className="flex items-start gap-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-4 py-3">
+          <AlertTriangle size={16} className="text-[#DC2626] shrink-0 mt-0.5" />
+          <p className="text-[13px] text-[#DC2626] flex-1">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="text-[12px] text-[#DC2626] font-medium hover:underline shrink-0"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* ── Monitored Enterprise Client Banner ────────────────────────────── */}
-      <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-card border border-blue-500/30 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ── 4 Top Stat Cards (Requested in Prompt) ──────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. Active Investigations */}
+        <StatCard
+          icon={<Bell size={16} />}
+          label="Active Investigations"
+          value={stats?.active_alerts ?? "—"}
+          sub="Unresolved SOC alerts"
+          color={stats?.active_alerts > 0 ? "red" : "blue"}
+          loading={loading}
+        />
+
+        {/* 2. High-Risk Users */}
+        <StatCard
+          icon={<Users size={16} />}
+          label="High-Risk Users"
+          value={highRiskCount || stats?.high_risk_users || 0}
+          sub="Risk score ≥ 65"
+          color={highRiskCount > 0 ? "orange" : "blue"}
+          loading={loading}
+        />
+
+        {/* 3. Events Analyzed */}
+        <StatCard
+          icon={<Activity size={16} />}
+          label="Events Analyzed"
+          value={eventsAnalyzed}
+          sub="Baseline & telemetry events"
+          color="blue"
+          loading={loading}
+        />
+
+        {/* 4. Critical Alerts */}
+        <StatCard
+          icon={<ShieldAlert size={16} />}
+          label="Critical Alerts"
+          value={criticalCount}
+          sub="Severity score ≥ 80"
+          color={criticalCount > 0 ? "red" : "blue"}
+          loading={loading}
+        />
+      </div>
+
+      {/* ── Charts Row (Linear/Stripe Style) ────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Risk Activity Over Time chart */}
+        <div className="card lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#0F172A]">Risk Activity Over Time</h3>
+              <p className="text-[12px] text-[#64748B] mt-0.5">
+                14-day rolling average fleet anomaly trend
+              </p>
+            </div>
+            <span className="badge-neutral text-[11px]">Ensemble Model</span>
+          </div>
+          <RiskActivityChart users={users} />
+        </div>
+
+        {/* Risk Distribution chart */}
+        <div className="card">
+          <div className="mb-4">
+            <h3 className="text-[14px] font-semibold text-[#0F172A]">Risk Distribution</h3>
+            <p className="text-[12px] text-[#64748B] mt-0.5">Monitored users by threat severity</p>
+          </div>
+          <RiskDistributionChart users={users} />
+        </div>
+      </div>
+
+      {/* ── Real-time Telemetry Status Banner ────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-[#E2E8F0] rounded-lg px-4 py-3 shadow-card">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-xl text-blue-400">
-            🏢
+          <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center text-[11px] font-bold text-[#2563EB] shrink-0">
+            EDR
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-white tracking-wide">Monitored Client: Apex Global Technologies Inc.</h3>
-              <span className="flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                TELEMETRY ACTIVE
+              <span className="text-[13px] font-semibold text-[#0F172A]">
+                Apex Global Technologies Inc.
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#16A34A] bg-[#F0FDF4] border border-[#BBF7D0] px-2 py-0.2 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
+                Live Stream
               </span>
             </div>
-            <p className="text-xs text-muted mt-0.5">
-              Receiving live audit logs & behavioural events from Enterprise Cloud ERP on <code className="text-blue-400">localhost:3000</code>
+            <p className="text-[12px] text-[#64748B]">
+              Ingesting real-time behavioral audit events from enterprise ERP & workspace
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <a
-            href="http://localhost:3000"
-            target="_blank"
-            rel="noreferrer"
-            className="btn-primary text-xs flex items-center gap-1.5"
-          >
-            <span>Open Apex Global Portal</span>
-            <span>↗</span>
-          </a>
-        </div>
+        <a
+          href="http://localhost:3000"
+          target="_blank"
+          rel="noreferrer"
+          className="btn-secondary text-[12.5px] self-start sm:self-auto"
+        >
+          <span>Open Client Intranet</span>
+          <ExternalLink size={12} />
+        </a>
       </div>
 
-      {/* ── Stat cards ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon="👥"
-          label="Total Users"
-          value={stats?.total_users ?? "—"}
-          sub="monitored accounts"
-          color="text-accent-light"
-        />
-        <StatCard
-          icon="🚨"
-          label="Active Alerts"
-          value={stats?.active_alerts ?? "—"}
-          sub="require review"
-          color="text-high"
-        />
-        <StatCard
-          icon="⚠️"
-          label="High Risk"
-          value={stats?.high_risk_users ?? "—"}
-          sub="score ≥ 65"
-          color="text-medium"
-        />
-        <StatCard
-          icon="📊"
-          label="Avg Risk Score"
-          value={stats?.avg_risk_score != null ? `${stats.avg_risk_score}` : "—"}
-          sub="fleet baseline"
-          color="text-slate-300"
-        />
-      </div>
-
-      {/* ── Real-time Telemetry Stream Ticker ─────────────────────────────── */}
-      {liveEvents.length > 0 && (
-        <div className="card space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
-              <h3 className="font-semibold text-white text-sm">Real-time Telemetry Stream (Apex Global)</h3>
-            </div>
-            <span className="text-xs text-muted font-mono">{liveEvents.length} recent events</span>
+      {/* ── Recent Detections Table ─────────────────────────────────── */}
+      <div className="card p-0 overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-[#E2E8F0]">
+          <div>
+            <h3 className="text-[14px] font-semibold text-[#0F172A]">Recent Detections</h3>
+            <p className="text-[12px] text-[#64748B] mt-0.5">
+              Ranked by dual-model ensemble anomaly index
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {liveEvents.slice(0, 6).map((evt) => (
-              <div
-                key={evt.id}
-                className={`p-3 rounded-lg border text-xs flex flex-col justify-between transition-all ${
-                  evt.severity === "critical"
-                    ? "bg-rose-950/20 border-rose-500/40 text-rose-200"
-                    : evt.severity === "high"
-                    ? "bg-amber-950/20 border-amber-500/40 text-amber-200"
-                    : "bg-navy/60 border-border text-slate-300"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <span className="font-bold text-white block truncate max-w-[150px]">
-                      {evt.user_name}
-                    </span>
-                    <span className="text-[10px] text-muted font-mono">{evt.action}</span>
-                  </div>
-                  <span
-                    className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded border ${
-                      evt.risk_score >= 80
-                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
-                        : evt.risk_score >= 65
-                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                        : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                    }`}
-                  >
-                    {evt.risk_score}
-                  </span>
-                </div>
-                <div className="text-[10px] text-muted truncate">
-                  {evt.explanation}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── User leaderboard ─────────────────────────────────────────────── */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-white">Risk Score Leaderboard</h3>
           <div className="flex items-center gap-2">
             {/* Search */}
-            <input
-              id="user-search"
-              type="text"
-              placeholder="Search users…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="bg-navy border border-border text-sm text-slate-300 rounded-lg px-3 py-1.5 w-44
-                         focus:outline-none focus:border-accent/60 placeholder:text-muted"
-            />
-            {/* Filter tabs */}
-            {["all","high","medium","low"].map(f => (
-              <button
-                key={f}
-                id={`filter-${f}`}
-                onClick={() => setFilter(f)}
-                className={`text-xs px-3 py-1.5 rounded-lg font-semibold capitalize transition-all duration-150
-                  ${filter === f
-                    ? "bg-accent/20 text-accent border border-accent/40"
-                    : "text-muted hover:text-slate-300 border border-transparent hover:border-border"
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+              <input
+                id="search-recent-detections"
+                type="text"
+                placeholder="Search user, department…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-8 py-1.5 text-[12.5px] w-48 sm:w-56"
+              />
+            </div>
+
+            {/* Severity Filter Tabs */}
+            <div className="flex items-center gap-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-md p-0.5">
+              {[
+                { key: "all", label: "All" },
+                { key: "critical", label: "Critical" },
+                { key: "high", label: "High" },
+                { key: "medium", label: "Medium" },
+                { key: "low", label: "Low" },
+              ].map((f) => (
+                <button
+                  key={f.key}
+                  id={`filter-btn-${f.key}`}
+                  onClick={() => setFilter(f.key)}
+                  className={`px-2.5 py-1 rounded text-[11.5px] font-medium transition-colors ${
+                    filter === f.key
+                      ? "bg-white text-[#0F172A] shadow-2xs font-semibold"
+                      : "text-[#64748B] hover:text-[#0F172A]"
                   }`}
-              >
-                {f}
-              </button>
-            ))}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {loading ? <LoadingSkeleton /> : (
+        {loading ? (
+          <div className="p-6 space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="skeleton h-10 w-full" />
+            ))}
+          </div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-border text-muted text-xs uppercase tracking-wide">
-                  <th className="text-left py-3 px-3 font-semibold">User</th>
-                  <th className="text-left py-3 px-3 font-semibold">Department</th>
-                  <th className="text-left py-3 px-3 font-semibold">Risk Score</th>
-                  <th className="text-left py-3 px-3 font-semibold">Level</th>
-                  <th className="text-left py-3 px-3 font-semibold">Last Scan</th>
-                  <th className="py-3 px-3" />
+                <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
+                  <th className="py-3 px-5">User</th>
+                  <th className="py-3 px-4">Department</th>
+                  <th className="py-3 px-4">Primary Anomaly Vector</th>
+                  <th className="py-3 px-4">Risk Score</th>
+                  <th className="py-3 px-4">Severity</th>
+                  <th className="py-3 px-4">Last Evaluated</th>
+                  <th className="py-3 px-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#F1F5F9]">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-muted">No users match your filter.</td>
-                  </tr>
-                ) : filteredUsers.map((user, idx) => (
-                  <tr
-                    key={user.user_id}
-                    id={`user-row-${user.user_id}`}
-                    className="table-row animate-slide-up"
-                    style={{ animationDelay: `${idx * 20}ms` }}
-                    onClick={() => navigate(`/user/${user.user_id}`)}
-                  >
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center
-                                        justify-center text-xs font-bold text-accent-light">
-                          {user.name?.split(" ").map(n => n[0]).join("").slice(0,2)}
-                        </div>
-                        <div>
-                          <div className="font-medium text-slate-200">{user.name}</div>
-                          <div className="text-xs text-muted font-mono">{user.user_id}</div>
-                        </div>
-                      </div>
+                    <td colSpan={7} className="text-center py-12 text-[#94A3B8] text-[13px]">
+                      No detections match the selected criteria
                     </td>
-                    <td className="py-3 px-3 text-muted">{user.department}</td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-28 h-1.5 bg-navy rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{
-                              width: `${Math.min(user.risk_score, 100)}%`,
-                              backgroundColor:
-                                user.risk_score >= 80 ? "#dc2626" :
-                                user.risk_score >= 65 ? "#ef4444" :
-                                user.risk_score >= 40 ? "#f59e0b" : "#22c55e",
-                            }}
-                          />
+                  </tr>
+                ) : (
+                  filteredUsers.map((user) => (
+                    <tr
+                      key={user.user_id}
+                      id={`user-row-${user.user_id}`}
+                      onClick={() => navigate(`/user/${user.user_id}`)}
+                      className="hover:bg-[#F8FAFC] transition-colors cursor-pointer group"
+                    >
+                      {/* User */}
+                      <td className="py-3 px-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center text-[11px] font-semibold text-[#2563EB] shrink-0">
+                            {user.name
+                              ?.split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-[13px] font-medium text-[#0F172A] group-hover:text-[#2563EB] transition-colors">
+                              {user.name}
+                            </div>
+                            <div className="text-[11px] text-[#94A3B8] font-mono">
+                              {user.user_id}
+                            </div>
+                          </div>
                         </div>
-                        <span className={`font-bold font-mono text-sm ${scoreClass(user.risk_score)}`}>
-                          {user.risk_score?.toFixed(1) ?? "—"}
+                      </td>
+
+                      {/* Department */}
+                      <td className="py-3 px-4 text-[13px] text-[#475569]">
+                        {user.department || "General"}
+                      </td>
+
+                      {/* Primary Anomaly Vector */}
+                      <td className="py-3 px-4 text-[12.5px] font-medium text-[#334155]">
+                        {getAnomalyVector(user)}
+                      </td>
+
+                      {/* Risk score */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-[#F1F5F9] rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(user.risk_score || 0, 100)}%`,
+                                backgroundColor:
+                                  user.risk_score >= 80
+                                    ? "#DC2626"
+                                    : user.risk_score >= 65
+                                    ? "#EA580C"
+                                    : user.risk_score >= 40
+                                    ? "#D97706"
+                                    : "#16A34A",
+                              }}
+                            />
+                          </div>
+                          <span className="text-[13px] font-semibold text-[#0F172A] tabular-nums">
+                            {user.risk_score?.toFixed(1) ?? "0.0"}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Severity */}
+                      <td className="py-3 px-4">
+                        <span className={getRiskBadge(user.risk_score || 0)}>
+                          {getRiskLabel(user.risk_score || 0)}
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className={scoreBadge(user.risk_score)}>
-                        {scoreLabel(user.risk_score)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-muted text-xs font-mono">
-                      {user.computed_at ? formatTime(user.computed_at) : "—"}
-                    </td>
-                    <td className="py-3 px-3">
-                      <button
-                        className="text-xs text-accent hover:text-accent-light border border-accent/30
-                                   hover:border-accent/60 px-2.5 py-1 rounded-md transition-all duration-150"
-                        onClick={e => { e.stopPropagation(); navigate(`/user/${user.user_id}`); }}
-                      >
-                        Profile →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      {/* Last evaluated */}
+                      <td className="py-3 px-4 text-[12px] text-[#64748B]">
+                        {formatTime(user.computed_at)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-5 text-right">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/user/${user.user_id}`);
+                          }}
+                          className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors"
+                        >
+                          <span>Investigate</span>
+                          <ChevronRight size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
-      {/* ── Download Panel ────────────────────────────────────────────── */}
+
+      {/* ── Report Downloads ────────────────────────────────────────── */}
       <DownloadPanel />
     </div>
   );

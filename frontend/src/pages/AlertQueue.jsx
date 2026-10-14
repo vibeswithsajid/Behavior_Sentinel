@@ -1,130 +1,163 @@
 import { useEffect, useState, useMemo } from "react";
 import { fetchAlerts, dismissAlert } from "../api";
 import AlertCard from "../components/AlertCard";
+import {
+  AlertTriangle,
+  RefreshCw,
+  CheckCircle2,
+  Filter,
+  ShieldCheck,
+} from "lucide-react";
 
 export default function AlertQueue() {
-  const [alerts,    setAlerts]    = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [filter,    setFilter]    = useState("all"); // all | critical | high | medium
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState("all");
   const [dismissing, setDismissing] = useState(new Set());
 
   const loadAlerts = async () => {
     try {
       setError(null);
       const data = await fetchAlerts();
-      setAlerts(data);
-    } catch (err) {
-      setError("Failed to load alerts. Ensure the backend is running.");
+      setAlerts(data || []);
+    } catch {
+      setError("Failed to load investigation queue. Ensure the backend engine is running.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadAlerts(); }, []);
+  useEffect(() => {
+    loadAlerts();
+  }, []);
 
   const handleDismiss = async (alertId) => {
-    setDismissing(prev => new Set(prev).add(alertId));
+    setDismissing((prev) => new Set(prev).add(alertId));
     try {
       await dismissAlert(alertId);
-      setAlerts(prev => prev.filter(a => a.id !== alertId));
-    } catch (err) {
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+    } catch {
       setError("Failed to dismiss alert.");
     } finally {
-      setDismissing(prev => { const s = new Set(prev); s.delete(alertId); return s; });
+      setDismissing((prev) => {
+        const s = new Set(prev);
+        s.delete(alertId);
+        return s;
+      });
     }
   };
 
   const filtered = useMemo(() => {
-    if (filter === "all")      return alerts;
-    if (filter === "critical") return alerts.filter(a => a.risk_score >= 80);
-    if (filter === "high")     return alerts.filter(a => a.risk_score >= 65 && a.risk_score < 80);
-    if (filter === "medium")   return alerts.filter(a => a.risk_score < 65);
+    if (filter === "all") return alerts;
+    if (filter === "critical") return alerts.filter((a) => a.risk_score >= 80);
+    if (filter === "high") return alerts.filter((a) => a.risk_score >= 65 && a.risk_score < 80);
+    if (filter === "medium") return alerts.filter((a) => a.risk_score < 65);
     return alerts;
   }, [alerts, filter]);
 
-  const counts = useMemo(() => ({
-    all:      alerts.length,
-    critical: alerts.filter(a => a.risk_score >= 80).length,
-    high:     alerts.filter(a => a.risk_score >= 65 && a.risk_score < 80).length,
-    medium:   alerts.filter(a => a.risk_score < 65).length,
-  }), [alerts]);
+  const counts = useMemo(
+    () => ({
+      all: alerts.length,
+      critical: alerts.filter((a) => a.risk_score >= 80).length,
+      high: alerts.filter((a) => a.risk_score >= 65 && a.risk_score < 80).length,
+      medium: alerts.filter((a) => a.risk_score < 65).length,
+    }),
+    [alerts]
+  );
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Alert Queue</h2>
-          <p className="text-sm text-muted mt-0.5">
-            {alerts.length} active alert{alerts.length !== 1 ? "s" : ""} requiring analyst review
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-xl font-semibold text-[#0F172A]">Investigation Queue</h2>
+            <span className="badge-critical text-[11px] font-medium">
+              {alerts.length} Active {alerts.length === 1 ? "Incident" : "Incidents"}
+            </span>
+          </div>
+          <p className="text-[13px] text-[#64748B]">
+            Prioritized review queue for anomalous employee actions flagged by ensemble inference.
           </p>
         </div>
 
-        {/* Auto-refresh indicator */}
         <button
           id="btn-refresh-alerts"
-          onClick={() => { setLoading(true); loadAlerts(); }}
-          className="btn-ghost"
+          onClick={() => {
+            setLoading(true);
+            loadAlerts();
+          }}
+          className="btn-secondary text-[13px] self-start sm:self-auto"
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="23 4 23 10 17 10" />
-            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
-          </svg>
-          Refresh
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          <span>Refresh Queue</span>
         </button>
       </div>
 
-      {/* Error */}
+      {/* Error Banner */}
       {error && (
-        <div className="bg-high/10 border border-high/30 text-high rounded-xl px-4 py-3 text-sm">
-          {error}
+        <div className="flex items-start gap-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-4 py-3">
+          <AlertTriangle size={16} className="text-[#DC2626] shrink-0 mt-0.5" />
+          <p className="text-[13px] text-[#DC2626] flex-1">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="text-[12px] text-[#DC2626] font-medium hover:underline shrink-0"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 bg-white border border-[#E2E8F0] rounded-lg p-1 w-fit shadow-card">
         {[
-          { key: "all",      label: "All",      color: "text-slate-300" },
-          { key: "critical", label: "Critical",  color: "text-critical" },
-          { key: "high",     label: "High",      color: "text-high" },
-          { key: "medium",   label: "Medium",    color: "text-medium" },
-        ].map(({ key, label, color }) => (
+          { key: "all", label: "All Incidents", count: counts.all },
+          { key: "critical", label: "Critical", count: counts.critical },
+          { key: "high", label: "High Risk", count: counts.high },
+          { key: "medium", label: "Medium", count: counts.medium },
+        ].map(({ key, label, count }) => (
           <button
             key={key}
             id={`alert-filter-${key}`}
             onClick={() => setFilter(key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
-                        transition-all duration-150 border
-                        ${filter === key
-                          ? "bg-accent/10 border-accent/40 text-accent"
-                          : "border-border text-muted hover:text-slate-300 hover:border-border/80"
-                        }`}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[12.5px] font-medium transition-colors ${
+              filter === key
+                ? "bg-[#0F172A] text-white font-semibold"
+                : "text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC]"
+            }`}
           >
-            {label}
-            <span className={`text-xs font-bold ${filter === key ? "text-accent" : color}`}>
-              {counts[key]}
+            <span>{label}</span>
+            <span
+              className={`text-[10.5px] px-1.5 py-0.2 rounded-full tabular-nums font-semibold ${
+                filter === key ? "bg-white/20 text-white" : "bg-[#F1F5F9] text-[#64748B]"
+              }`}
+            >
+              {count}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Alert list */}
+      {/* Alerts Stream */}
       {loading ? (
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="skeleton h-24 w-full rounded-xl" />
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="skeleton h-28 w-full rounded-lg" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center py-16 text-center space-y-3">
-          <div className="w-14 h-14 rounded-full bg-low/10 border border-low/30 flex items-center justify-center text-2xl">
-            ✓
+        <div className="card text-center py-16 space-y-3">
+          <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto text-[#16A34A]">
+            <ShieldCheck size={24} />
           </div>
           <div>
-            <p className="text-low font-semibold">No alerts in this category</p>
-            <p className="text-muted text-sm mt-1">All clear — no threats detected at this severity level.</p>
+            <h3 className="text-[15px] font-semibold text-[#0F172A]">
+              Queue cleared for this category
+            </h3>
+            <p className="text-[13px] text-[#64748B] mt-1 max-w-md mx-auto">
+              All monitored users in this severity tier are behaving consistently with their historical statistical baselines.
+            </p>
           </div>
         </div>
       ) : (

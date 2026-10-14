@@ -1,135 +1,169 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Shield, Eye, EyeOff, Lock, User, ArrowRight, AlertTriangle } from "lucide-react";
 
-// Role badge colours
 const ROLE_INFO = {
-  intern:         { label: "Intern",          color: "text-low",    bg: "bg-low/10 border-low/30" },
-  junior:         { label: "Junior",          color: "text-accent", bg: "bg-accent/10 border-accent/30" },
-  senior_manager: { label: "Senior Manager",  color: "text-medium", bg: "bg-medium/10 border-medium/30" },
-  manager:        { label: "Manager",         color: "text-high",   bg: "bg-high/10 border-high/30" },
+  intern: {
+    label: "Intern Analyst",
+    scope: "Personal activity telemetry & audit log",
+    color: "border-[#E2E8F0] hover:border-[#CBD5E1] bg-white",
+    badge: "badge-neutral",
+  },
+  junior: {
+    label: "Junior Analyst",
+    scope: "Personal telemetry + team risk scores export",
+    color: "border-[#BFDBFE] hover:border-[#93C5FD] bg-[#EFF6FF]",
+    badge: "badge-blue",
+  },
+  senior_manager: {
+    label: "Senior SOC Manager",
+    scope: "Full overview, threat detection, and investigation queue",
+    color: "border-[#DDD6FE] hover:border-[#C4B5FD] bg-[#F5F3FF]",
+    badge: "text-[#7C3AED] bg-white border border-[#DDD6FE]",
+  },
+  manager: {
+    label: "Executive Director",
+    scope: "Full administrator clearance + ML pipeline execution",
+    color: "border-[#FED7AA] hover:border-[#FDBA74] bg-[#FFF7ED]",
+    badge: "badge-high",
+  },
 };
 
-// Credential hints for demo
 const DEMO_CREDENTIALS = [
-  { username: "intern01",   password: "intern123",  role: "intern" },
-  { username: "junior01",   password: "junior123",  role: "junior" },
-  { username: "senior_mgr", password: "senior123",  role: "senior_manager" },
-  { username: "manager",    password: "manager123", role: "manager" },
+  { username: "intern01", password: "intern123", role: "intern" },
+  { username: "junior01", password: "junior123", role: "junior" },
+  { username: "senior_mgr", password: "senior123", role: "senior_manager" },
+  { username: "manager", password: "manager123", role: "manager" },
 ];
 
 export default function Login() {
-  const navigate  = useNavigate();
+  const navigate = useNavigate();
   const { login } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username || !password) { setError("Please enter your credentials."); return; }
+    if (!username.trim() || !password) {
+      setError("Please enter both username and password.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
       await login(username.trim(), password);
       navigate("/", { replace: true });
     } catch (err) {
-      const detail = err?.response?.data?.detail || "Login failed. Check credentials.";
+      const detail = err?.response?.data?.detail || "Invalid credentials. Please verify your username and password.";
       setError(detail);
     } finally {
       setLoading(false);
     }
   };
 
-  const fillDemo = (cred) => {
+  const fillDemo = async (cred) => {
     setUsername(cred.username);
     setPassword(cred.password);
     setError("");
+    setLoading(true);
+    try {
+      await login(cred.username, cred.password);
+      navigate("/", { replace: true });
+    } catch (err) {
+      const detail = err?.response?.data?.detail || "Authentication failed.";
+      setError(detail);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-navy flex items-center justify-center p-4">
-      {/* Background glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px]
-                        bg-accent/5 rounded-full blur-3xl" />
-      </div>
-
-      <div className="w-full max-w-md animate-fade-in relative">
-
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-accent/20 border border-accent/40 rounded-2xl
-                          flex items-center justify-center mx-auto mb-4 shadow-lg shadow-accent/10">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                 stroke="#6366f1" strokeWidth="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center p-4 selection:bg-[#2563EB] selection:text-white">
+      <div className="w-full max-w-md space-y-6 animate-fade-in">
+        {/* Brand Header */}
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#2563EB] text-white shadow-card mb-1">
+            <Shield size={24} strokeWidth={2.2} />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-wide">BehaviorSentinel</h1>
-          <p className="text-muted text-sm mt-1 font-mono tracking-widest uppercase text-xs">
-            Insider Threat Detection
+          <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
+            BehaviorSentinel
+          </h1>
+          <p className="text-[13.5px] text-[#64748B]">
+            Enterprise Insider Threat Detection & Behavioral Telemetry
           </p>
         </div>
 
-        {/* Login card */}
-        <div className="card space-y-5">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Sign In</h2>
-            <p className="text-muted text-sm mt-0.5">Enter your credentials to access the platform</p>
-          </div>
-
+        {/* Main Authentication Card */}
+        <div className="card shadow-card-md p-6 sm:p-8 space-y-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username */}
             <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-widest mb-1.5">
-                Username
-              </label>
-              <input
-                id="input-username"
-                type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="e.g. manager"
-                autoComplete="username"
-                className="w-full bg-navy border border-border rounded-lg px-3 py-2.5 text-sm text-slate-200
-                           focus:outline-none focus:border-accent/60 placeholder:text-muted transition-colors"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="block text-xs font-semibold text-muted uppercase tracking-widest mb-1.5">
-                Password
+              <label
+                htmlFor="input-username"
+                className="block text-[13px] font-medium text-[#0F172A] mb-1.5"
+              >
+                Username or Agent ID
               </label>
               <div className="relative">
+                <User
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                />
+                <input
+                  id="input-username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g. manager or intern01"
+                  autoComplete="username"
+                  className="input pl-9 text-[13px]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="input-password"
+                  className="block text-[13px] font-medium text-[#0F172A]"
+                >
+                  Password
+                </label>
+              </div>
+              <div className="relative">
+                <Lock
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                />
                 <input
                   id="input-password"
                   type={showPass ? "text" : "password"}
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter password"
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your security passphrase"
                   autoComplete="current-password"
-                  className="w-full bg-navy border border-border rounded-lg px-3 py-2.5 text-sm text-slate-200
-                             focus:outline-none focus:border-accent/60 placeholder:text-muted transition-colors pr-10"
+                  className="input pl-9 pr-10 text-[13px]"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPass(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-slate-300"
+                  onClick={() => setShowPass((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] transition-colors"
+                  aria-label={showPass ? "Hide password" : "Show password"}
                 >
-                  {showPass ? "🙈" : "👁"}
+                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
-            {/* Error */}
+            {/* Error Message */}
             {error && (
-              <div className="bg-high/10 border border-high/30 text-high rounded-lg px-3 py-2 text-xs flex items-center gap-2">
-                <span>⚠</span> {error}
+              <div className="flex items-start gap-2 bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-3 text-[12.5px] text-[#DC2626]">
+                <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -137,26 +171,23 @@ export default function Login() {
               id="btn-login"
               type="submit"
               disabled={loading}
-              className="btn-primary w-full justify-center py-3"
+              className="btn-primary w-full py-2.5 text-[13.5px] font-medium flex items-center justify-center gap-2"
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3" />
-                    <path d="M21 12a9 9 0 00-9-9" />
-                  </svg>
-                  Signing in…
-                </>
-              ) : "Sign In →"}
+              <span>{loading ? "Authenticating…" : "Sign in to Security Platform"}</span>
+              {!loading && <ArrowRight size={14} />}
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="border-t border-border pt-4">
-            <p className="text-xs text-muted mb-3 text-center uppercase tracking-widest font-semibold">
-              Demo Accounts — click to fill
-            </p>
-            <div className="grid grid-cols-2 gap-2">
+          {/* Quick Demo Credentials */}
+          <div className="border-t border-[#E2E8F0] pt-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[#94A3B8]">
+                One-Click Role Demonstration
+              </span>
+              <span className="text-[11px] text-[#94A3B8]">Click any tier to enter</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {DEMO_CREDENTIALS.map((cred) => {
                 const info = ROLE_INFO[cred.role];
                 return (
@@ -165,12 +196,25 @@ export default function Login() {
                     id={`demo-${cred.role}`}
                     type="button"
                     onClick={() => fillDemo(cred)}
-                    className={`text-left px-3 py-2.5 rounded-lg border transition-all duration-150
-                                hover:scale-[1.02] ${info.bg}
-                                ${username === cred.username ? "ring-1 ring-accent/50" : ""}`}
+                    disabled={loading}
+                    className={`text-left p-3 rounded-lg border transition-all hover:shadow-xs flex flex-col justify-between ${info.color}`}
                   >
-                    <div className={`text-xs font-bold ${info.color}`}>{info.label}</div>
-                    <div className="text-[10px] text-muted font-mono mt-0.5">{cred.username}</div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[12.5px] font-bold text-[#0F172A]">
+                          {info.label}
+                        </span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${info.badge}`}>
+                          {cred.role.replace("_", " ")}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#64748B] leading-tight">
+                        {info.scope}
+                      </p>
+                    </div>
+                    <div className="text-[10.5px] font-mono text-[#94A3B8] mt-2">
+                      User: {cred.username}
+                    </div>
                   </button>
                 );
               })}
@@ -178,24 +222,10 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Role access table */}
-        <div className="card mt-4 text-xs">
-          <p className="text-muted font-semibold uppercase tracking-widest mb-3 text-[10px]">Access Levels</p>
-          <div className="space-y-1.5">
-            {[
-              { role: "Intern",          access: "Own profile + activity" },
-              { role: "Junior",          access: "+ Team risk scores + downloads" },
-              { role: "Senior Manager",  access: "+ All users + Alerts + dismiss" },
-              { role: "Manager",         access: "+ Run Detection + Full reports" },
-            ].map(row => (
-              <div key={row.role} className="flex items-center justify-between">
-                <span className="text-slate-400 font-medium">{row.role}</span>
-                <span className="text-muted">{row.access}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
+        {/* Security disclaimer */}
+        <p className="text-center text-[12px] text-[#94A3B8]">
+          Protected by BehaviorSentinel EDR · 256-bit AES Token Encryption
+        </p>
       </div>
     </div>
   );

@@ -1,123 +1,128 @@
 import { useNavigate } from "react-router-dom";
+import {
+  ShieldAlert,
+  ArrowRight,
+  Check,
+  Clock,
+  User,
+  Building2,
+  Cpu,
+} from "lucide-react";
 
-const scoreColor = (score) => {
-  if (score >= 80) return "text-critical";
-  if (score >= 65) return "text-high";
-  if (score >= 40) return "text-medium";
-  return "text-low";
-};
-
-const scoreBorderColor = (score) => {
-  if (score >= 80) return "border-critical/40 glow-red";
-  if (score >= 65) return "border-high/40 glow-red";
-  if (score >= 40) return "border-medium/40 glow-yellow";
-  return "border-low/30";
-};
-
-const scoreBadge = (score) => {
+const getRiskBadge = (score) => {
   if (score >= 80) return "badge-critical";
   if (score >= 65) return "badge-high";
   if (score >= 40) return "badge-medium";
   return "badge-low";
 };
 
-const scoreLabel = (score) => {
-  if (score >= 80) return "Critical";
-  if (score >= 65) return "High";
-  if (score >= 40) return "Medium";
-  return "Low";
+const getRiskLabel = (score) => {
+  if (score >= 80) return "Critical Threat";
+  if (score >= 65) return "High Risk";
+  if (score >= 40) return "Medium Risk";
+  return "Low Risk";
 };
 
 const formatTime = (iso) => {
-  if (!iso) return "";
+  if (!iso) return "Recent";
   const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
-  return d.toLocaleString();
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
-/**
- * A single alert card in the alert queue.
- */
 export default function AlertCard({ alert, onDismiss, dismissing, style }) {
   const navigate = useNavigate();
 
   return (
     <div
       id={`alert-card-${alert.id}`}
-      className={`card border animate-slide-up ${scoreBorderColor(alert.risk_score)} transition-all duration-200`}
+      className="card hover:border-[#CBD5E1] transition-all duration-200"
       style={style}
     >
-      <div className="flex items-start gap-4">
-
-        {/* Score ring (compact) */}
-        <div className="flex-shrink-0 flex flex-col items-center gap-1 pt-0.5">
-          <div
-            className="w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold font-mono text-sm"
-            style={{
-              borderColor: alert.risk_score >= 80 ? "#dc2626" : alert.risk_score >= 65 ? "#ef4444" : "#f59e0b",
-              color:       alert.risk_score >= 80 ? "#dc2626" : alert.risk_score >= 65 ? "#ef4444" : "#f59e0b",
-              boxShadow:   `0 0 12px ${alert.risk_score >= 65 ? "rgba(239,68,68,0.25)" : "rgba(245,158,11,0.25)"}`,
-            }}
-          >
+      <div className="flex flex-col sm:flex-row items-start gap-4">
+        {/* Score indicator badge */}
+        <div
+          className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-14 rounded-lg border ${
+            alert.risk_score >= 80
+              ? "bg-[#FEF2F2] border-[#FECACA] text-[#DC2626]"
+              : alert.risk_score >= 65
+              ? "bg-[#FFF7ED] border-[#FED7AA] text-[#EA580C]"
+              : "bg-[#FFFBEB] border-[#FDE68A] text-[#D97706]"
+          }`}
+        >
+          <span className="text-lg font-bold tabular-nums">
             {alert.risk_score?.toFixed(0)}
-          </div>
-          <span className={`${scoreBadge(alert.risk_score)} text-[10px] px-1.5 py-0.5`}>
-            {scoreLabel(alert.risk_score)}
+          </span>
+          <span className="text-[10px] uppercase font-semibold tracking-wider opacity-80 -mt-0.5">
+            Score
           </span>
         </div>
 
-        {/* Content */}
+        {/* Content Details */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <button
-              className="font-semibold text-white hover:text-accent-light transition-colors duration-150 text-left"
-              onClick={() => navigate(`/user/${alert.user_id}`)}
-            >
-              {alert.name || alert.user_id}
-            </button>
-            <span className="text-muted text-xs font-mono">{alert.user_id}</span>
-            <span className="text-border text-xs">·</span>
-            <span className="text-muted text-xs">{alert.department}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                className="text-[14px] font-semibold text-[#0F172A] hover:text-[#2563EB] transition-colors"
+                onClick={() => navigate(`/user/${alert.user_id}`)}
+              >
+                {alert.name || alert.user_id}
+              </button>
+              <span className="text-[11.5px] font-mono text-[#94A3B8] bg-[#F8FAFC] border border-[#E2E8F0] px-1.5 py-0.5 rounded">
+                {alert.user_id}
+              </span>
+              <span className="text-[12px] text-[#64748B] flex items-center gap-1">
+                <Building2 size={12} className="text-[#94A3B8]" />
+                {alert.department || "General"}
+              </span>
+              <span className={getRiskBadge(alert.risk_score)}>
+                {getRiskLabel(alert.risk_score)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                id={`btn-view-user-${alert.user_id}`}
+                className="btn-primary text-[12px] py-1 px-3"
+                onClick={() => navigate(`/user/${alert.user_id}`)}
+              >
+                <span>Investigate</span>
+                <ArrowRight size={12} />
+              </button>
+              <button
+                id={`btn-dismiss-${alert.id}`}
+                className="btn-secondary text-[12px] py-1 px-2.5"
+                onClick={() => onDismiss(alert.id)}
+                disabled={dismissing}
+              >
+                {dismissing ? "Dismissing…" : "Dismiss"}
+              </button>
+            </div>
           </div>
 
-          {/* SHAP explanation */}
-          {alert.explanation ? (
-            <p className={`text-sm leading-relaxed mt-1 ${alert.risk_score >= 65 ? "text-slate-300" : "text-muted"}`}>
-              <span
-                className={`inline-block w-1.5 h-1.5 rounded-full mr-2 mb-0.5
-                  ${alert.risk_score >= 80 ? "bg-critical" : alert.risk_score >= 65 ? "bg-high" : "bg-medium"}`}
-              />
-              {alert.explanation}
+          {/* Explanation Text */}
+          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-md px-3.5 py-2.5 my-2">
+            <p className="text-[13px] text-[#334155] leading-relaxed">
+              {alert.explanation || "Evaluating SHAP attribution vector across 7 behavioral dimensions…"}
             </p>
-          ) : (
-            <p className="text-sm text-muted mt-1 italic">Generating explanation…</p>
-          )}
+          </div>
 
-          <div className="flex items-center gap-4 mt-2">
-            <span className="text-[11px] text-muted font-mono">
-              Detected: {formatTime(alert.created_at)}
+          {/* Meta footer */}
+          <div className="flex items-center gap-4 text-[11.5px] text-[#94A3B8] pt-1">
+            <span className="flex items-center gap-1">
+              <Clock size={12} />
+              Detected {formatTime(alert.created_at)}
+            </span>
+            <span>·</span>
+            <span className="flex items-center gap-1">
+              <Cpu size={12} />
+              Isolation Forest + Autoencoder Ensemble
             </span>
           </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <button
-            id={`btn-view-user-${alert.user_id}`}
-            className="btn-ghost text-xs py-1.5 px-3"
-            onClick={() => navigate(`/user/${alert.user_id}`)}
-          >
-            View Profile
-          </button>
-          <button
-            id={`btn-dismiss-${alert.id}`}
-            className="text-xs text-muted hover:text-low border border-border hover:border-low/40
-                       hover:bg-low/5 px-3 py-1.5 rounded-lg transition-all duration-150
-                       disabled:opacity-40 disabled:cursor-not-allowed"
-            onClick={() => onDismiss(alert.id)}
-            disabled={dismissing}
-          >
-            {dismissing ? "Dismissing…" : "✓ Dismiss"}
-          </button>
         </div>
       </div>
     </div>

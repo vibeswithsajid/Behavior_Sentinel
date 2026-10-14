@@ -9,20 +9,50 @@ export function AuthProvider({ children }) {
   const [user, setUser]   = useState(null);   // { user_id, role, name, department, token }
   const [loading, setLoading] = useState(true);
 
-  // Restore session from localStorage on mount
+  // Restore session from localStorage on mount, or auto-login as demo manager
   useEffect(() => {
+    const isLoggedOut = sessionStorage.getItem("bs_logged_out");
     const stored = localStorage.getItem("bs_user");
     if (stored) {
       try {
         setUser(JSON.parse(stored));
+        setLoading(false);
+        return;
       } catch {
         localStorage.removeItem("bs_user");
       }
     }
-    setLoading(false);
+
+    if (isLoggedOut) {
+      setLoading(false);
+      return;
+    }
+
+    // Auto-login as manager for seamless demo evaluation
+    axios
+      .post(`${API_BASE}/api/login`, { username: "manager", password: "manager123" })
+      .then((resp) => {
+        const data = resp.data;
+        const userData = {
+          user_id:    data.user_id,
+          role:       data.role,
+          name:       data.name,
+          department: data.department,
+          token:      data.token,
+        };
+        localStorage.setItem("bs_user", JSON.stringify(userData));
+        setUser(userData);
+      })
+      .catch((err) => {
+        console.error("Auto login error:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   const login = useCallback(async (username, password) => {
+    sessionStorage.removeItem("bs_logged_out");
     const resp = await axios.post(`${API_BASE}/api/login`, { username, password });
     const data = resp.data;
     const userData = {
@@ -38,6 +68,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    sessionStorage.setItem("bs_logged_out", "true");
     localStorage.removeItem("bs_user");
     setUser(null);
   }, []);

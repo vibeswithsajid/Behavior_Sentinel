@@ -5,20 +5,20 @@ export default {
     extend: {
       colors: {
         corp: {
-          bg: "#0b1329",
-          surface: "#111c38",
-          card: "#172346",
-          border: "#253560",
-          primary: "#3b82f6",
-          accent: "#06b6d4",
+          bg: "#09090b",
+          surface: "#121215",
+          card: "#18181b",
+          border: "#27272a",
+          primary: "#f4f4f5",
+          accent: "#a1a1aa",
           danger: "#ef4444",
-          warning: "#f59e0b",
-          success: "#10b981",
+          warning: "#e4e4e7",
+          success: "#d4d4d8",
         }
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "Menlo", "monospace"],
+        sans: ["Geist Mono", "JetBrains Mono", "Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "Geist Mono", "Menlo", "monospace"],
       }
     },
   },

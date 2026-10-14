@@ -4,39 +4,40 @@
 
 @layer base {
   body {
-    background-color: #0b1329;
-    color: #e2e8f0;
+    background-color: #09090b;
+    color: #e4e4e7;
+    font-family: 'Geist Mono', 'JetBrains Mono', monospace;
   }
 }
 
 .corp-card {
-  @apply bg-[#111c38] border border-[#253560] rounded-xl p-5 shadow-lg shadow-black/20 transition-all duration-200;
+  @apply bg-[#121215] border border-zinc-800 rounded-lg p-5 transition-all duration-150;
 }
 
 .corp-btn-primary {
-  @apply bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-all shadow-md shadow-blue-500/20 active:scale-[0.98];
+  @apply bg-zinc-100 hover:bg-white text-zinc-950 font-mono font-medium px-4 py-2 rounded text-xs tracking-wider uppercase transition-all active:scale-[0.98];
 }
 
 .corp-btn-danger {
-  @apply bg-red-600 hover:bg-red-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-all shadow-md shadow-red-500/20 active:scale-[0.98];
+  @apply bg-zinc-900 hover:bg-zinc-800 text-red-400 border border-red-900/60 font-mono font-medium px-4 py-2 rounded text-xs tracking-wider uppercase transition-all active:scale-[0.98];
 }
 
 .corp-btn-ghost {
-  @apply bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-[#253560] font-medium px-3 py-1.5 rounded-lg text-xs transition-all active:scale-[0.98];
+  @apply bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 font-mono font-medium px-3 py-1.5 rounded text-xs tracking-wider transition-all active:scale-[0.98];
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b1329;
+  background: #09090b;
 }
 ::-webkit-scrollbar-thumb {
-  background: #253560;
-  border-radius: 3px;
+  background: #27272a;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b82f6;
+  background: #3f3f46;
 }

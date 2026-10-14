@@ -1,87 +1,104 @@
 import { useEffect, useRef } from "react";
 
-const scoreColor = (score) => {
-  if (score >= 80) return "#dc2626";
-  if (score >= 65) return "#ef4444";
-  if (score >= 40) return "#f59e0b";
-  return "#22c55e";
-};
-
-const scoreLabel = (score) => {
+const getRiskLabel = (score) => {
   if (score >= 80) return "Critical";
-  if (score >= 65) return "High Risk";
+  if (score >= 65) return "High";
   if (score >= 40) return "Medium";
-  return "Low Risk";
+  return "Low";
 };
 
-/**
- * Animated circular SVG gauge showing a risk score.
- */
+const getRiskColor = (score) => {
+  if (score >= 80) return "#DC2626";
+  if (score >= 65) return "#EA580C";
+  if (score >= 40) return "#D97706";
+  return "#16A34A";
+};
+
+const getRiskTrackColor = (score) => {
+  if (score >= 80) return "#FEE2E2";
+  if (score >= 65) return "#FFEDD5";
+  if (score >= 40) return "#FEF3C7";
+  return "#DCFCE7";
+};
+
 export default function RiskScoreCard({ score = 0 }) {
   const circleRef = useRef(null);
 
-  const RADIUS      = 44;
+  const RADIUS = 44;
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-  const clampedScore = Math.min(Math.max(score, 0), 100);
-  const offset = CIRCUMFERENCE - (clampedScore / 100) * CIRCUMFERENCE;
-  const color  = scoreColor(clampedScore);
-  const label  = scoreLabel(clampedScore);
+  const clamped = Math.min(Math.max(score, 0), 100);
+  const offset = CIRCUMFERENCE - (clamped / 100) * CIRCUMFERENCE;
+  const color = getRiskColor(clamped);
+  const trackColor = getRiskTrackColor(clamped);
+  const label = getRiskLabel(clamped);
 
   useEffect(() => {
     if (!circleRef.current) return;
-    circleRef.current.style.strokeDashoffset = CIRCUMFERENCE; // reset
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        if (circleRef.current) {
-          circleRef.current.style.transition = "stroke-dashoffset 1s ease-out";
-          circleRef.current.style.strokeDashoffset = offset;
-        }
-      }, 50);
+    circleRef.current.style.strokeDashoffset = CIRCUMFERENCE;
+    const anim = requestAnimationFrame(() => {
+      if (circleRef.current) {
+        circleRef.current.style.transition = "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)";
+        circleRef.current.style.strokeDashoffset = offset;
+      }
     });
-  }, [score, offset]);
+    return () => cancelAnimationFrame(anim);
+  }, [score, offset, CIRCUMFERENCE]);
 
   return (
     <div
       id="risk-score-card"
-      className="flex flex-col items-center justify-center"
-      title={`Risk Score: ${clampedScore.toFixed(1)}`}
+      className="flex flex-col items-center justify-center select-none"
+      title={`Risk score: ${clamped.toFixed(1)}`}
     >
       <div className="relative w-28 h-28">
         <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-          {/* Track */}
+          {/* Background Track */}
           <circle
-            cx="50" cy="50" r={RADIUS}
+            cx="50"
+            cy="50"
+            r={RADIUS}
             fill="none"
-            stroke="#334155"
-            strokeWidth="8"
+            stroke={trackColor}
+            strokeWidth="7"
           />
-          {/* Score arc */}
+          {/* Animated Gauge Arc */}
           <circle
             ref={circleRef}
-            cx="50" cy="50" r={RADIUS}
+            cx="50"
+            cy="50"
+            r={RADIUS}
             fill="none"
             stroke={color}
-            strokeWidth="8"
+            strokeWidth="7"
             strokeLinecap="round"
             strokeDasharray={CIRCUMFERENCE}
             strokeDashoffset={CIRCUMFERENCE}
-            style={{ filter: `drop-shadow(0 0 6px ${color}66)` }}
           />
         </svg>
-        {/* Centre text */}
+
+        {/* Center Numbers */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold font-mono" style={{ color }}>
-            {clampedScore.toFixed(0)}
+          <span className="text-2xl font-bold tracking-tight tabular-nums" style={{ color }}>
+            {clamped.toFixed(0)}
           </span>
-          <span className="text-[9px] text-muted uppercase tracking-widest leading-tight">score</span>
+          <span className="text-[10px] uppercase font-semibold text-[#94A3B8] tracking-wider">
+            / 100
+          </span>
         </div>
       </div>
-      <span
-        className="text-xs font-semibold mt-1 uppercase tracking-wide"
-        style={{ color }}
-      >
-        {label}
-      </span>
+
+      <div className="mt-2 text-center">
+        <span
+          className="text-[12px] font-semibold px-2 py-0.5 rounded-full border"
+          style={{
+            color,
+            backgroundColor: `${color}10`,
+            borderColor: `${color}30`,
+          }}
+        >
+          {label} Threat Level
+        </span>
+      </div>
     </div>
   );
 }
